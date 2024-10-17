@@ -85,7 +85,7 @@ def test_final_positions(robot,target_positions):
 def gui(robot: CoppeliaRobot):
     while True:
         time.sleep(1)
-        img = robot.get_image()
+        # img = robot.get_image()
         cv2.imshow('img', img)
 
 if __name__ == "__main__":
@@ -109,9 +109,9 @@ if __name__ == "__main__":
 
     img = robot.get_image()
     warped_img = img.warp_perspective(warping_homography,tile=True)[0]
-    #mvt.idisp(warped_img.to_float(),block=True)
+    # mvt.idisp(warped_img.to_float(),block=True)
     target_positions = {
-        "blue square"   : np.array([300,-130],dtype=np.float64),
+        "blue square"   : np.array([300,-130],dtype=np.float64), # Go to 
         "green square"  : np.array([260, 170],dtype=np.float64),
         "red square"    : np.array([300, 100],dtype=np.float64),
         "blue circle"   : np.array([130, 150],dtype=np.float64),

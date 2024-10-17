@@ -8,7 +8,8 @@ import time
 import copy
 import matplotlib.pyplot as plt
 import machinevisiontoolbox as mvt
-from cv2 import findHomography
+import cv2
+import pickle
 
 L0 = 138
 L1 = 135
@@ -34,8 +35,10 @@ def PickAndPlaceRobot(robotObj,img:mvt.Image,target_positions:Dict):
         A dictionary containing the positions in the robot's XY plane that the
         objects must be placed.
     """
-
-    shapes = robotObj.REF_LocateShapes(img)
+    img = mvt.Image(img)
+    mvt.idisp(img.to_float(),block=True)
+    shapes = locate_shapes(img)
+    # shapes = robotObj.REF_LocateShapes(img)
     if shapes is None or 'calibration markers' not in shapes:
         raise ValueError("Failed to locate shapes or calibration markers in the image.")
 
@@ -47,7 +50,7 @@ def PickAndPlaceRobot(robotObj,img:mvt.Image,target_positions:Dict):
             print(f"{shape_name}:")
             for b in blob:
                 if b is not None:  # Ensure blob is valid
-                    print(f"  Blob ID: {b.id}, Bounding Box: {b.bbox}, Center: ({b.uc}, {b.vc})")
+                    print(f" Bounding Box: {b.bbox}, Center: ({b.uc}, {b.vc})")
                     sorted_calibration_markers.append(b)
         else:
             print(f"{shape_name}: Bounding Box: {blob.bbox}, Center: ({blob.u}, {blob.v})")
@@ -57,24 +60,27 @@ def PickAndPlaceRobot(robotObj,img:mvt.Image,target_positions:Dict):
     # Print uc and vc for sorted_calibration_markers
     print("\nsorted_calibration_markers:")
     for blob in sorted_calibration_markers:
-        print(f"Blob ID: {blob.id}, uc: {blob.uc}, vc: {blob.vc}")
+        print(f"uc: {blob.uc}, vc: {blob.vc}")
 
+    homography_answer = robotObj.REF_GetHomography(sorted_calibration_markers)
     homography = get_homography(sorted_calibration_markers)
-    # for shape, pos in shapes.items():
-    #     object_positions[shape] = np.array([pos[0], pos[1]])
-    object_positions_ans = robotObj.REF_GetObjectXY(shapes, homography)
     # Apply homography to target_positions
-    object_positions = 
+    for key in object_positions.keys():
+        object_positions[key] = apply_homography(object_positions[key][0], object_positions[key][1], homography)
+    
     print("object_positions: ", object_positions)
-    print("object_positions_ans: ", object_positions_ans)
 
     # print("target_positions: ", target_positions)
     print("homography: ", homography)
+    print("homography_answer: ", homography_answer)
 
     for shape,place_position in target_positions.items():
         print("shape: ", shape)
-        pick_position = np.array([183, 0 ,177])
-        place_position = np.array([place_position[0],place_position[1],0])
+        # find the pick position from object_positions
+        pick_position = np.array([object_positions[shape][0],object_positions[shape][1],0])
+        print("shape_pos: ", pick_position)
+        place_position = np.array([target_positions[shape][0],target_positions[shape][1],0])
+        print("Move to pos: ", place_position)
         PickUp(robotObj,pick_position)
         Place(robotObj,place_position)
     return
@@ -343,16 +349,21 @@ def get_homography(blob_list):
     homography
         An numpy array that can be used to warp an image.
     """
-    ref_points_array = np.array([[blob.uc, blob.vc] for blob in blob_list], dtype=np.float32)
+    ref_points_array = np.array([[blob.u, blob.v] for blob in blob_list], dtype=np.float32)
     ground_points = np.array([
         [223, 22.5],
         [223, -22.5],
         [178, 22.5],
         [178, -22.5]
     ], dtype=np.float32)
-    homography_matrix, _ = findHomography(ref_points_array.reshape(-1, 1, 2), ground_points.reshape(-1, 1, 2))
+    homography_matrix, _ = cv2.findHomography(ref_points_array.reshape(-1, 1, 2), ground_points.reshape(-1, 1, 2))
     return homography_matrix
 
+def apply_homography(x, y, homography):
+    point = np.array([[x, y]], dtype='float32')
+    point = np.array([point])
+    transformed_point = cv2.perspectiveTransform(point, homography)
+    return transformed_point[0][0]
 
 
 def locate_shapes(img: mvt.Image):
@@ -369,10 +380,79 @@ def locate_shapes(img: mvt.Image):
     shapes
         A dictionary containing the shapes in the image
     """
-    shapes = {}
+    # convert to ndarray
+    img = img.A
+    # HSV
+    img = mvt.colorspace_convert(img, 'rgb', 'hsv')    
+   
+
+   
+    red_lower1 = np.array([0, 120, 50])
+    red_upper1 = np.array([10, 255, 255])
+    red_lower2 = np.array([170, 120, 50])
+    red_upper2 = np.array([180, 255, 255])
+
+    greend_lower = np.array([40, 40, 40])
+    greend_upper = np.array([90, 255, 255])
+
+    blue_lower = np.array([90, 40, 40])
+    blue_upper = np.array([140, 255, 255])
+
+    # Creating two masks for red color and combining them
+    red_mask1 = cv2.inRange(img, red_lower1, red_upper1)
+    red_mask2 = cv2.inRange(img, red_lower2, red_upper2)
+    red_mask = red_mask1 | red_mask2
+
+    # Creating mask for green color
+    green_mask = cv2.inRange(img, greend_lower, greend_upper)
+
+    # Creating mask for blue color
+    blue_mask = cv2.inRange(img, blue_lower, blue_upper)
     
-    # Locate shapes in the image
-    # shapes = robotObj.REF_LocateShapes(img)
+    # Convet the masks to blobs
+    red_mask = mvt.Image(red_mask)
+    green_mask = mvt.Image(green_mask)
+    blue_mask = mvt.Image(blue_mask)
 
+    # get the red, green, and blue channels
+    red_blobs = red_mask.blobs()
+    green_blobs = green_mask.blobs()
+    blue_blobs = blue_mask.blobs()
 
+    # get the calibration markers
+    calibration_blobs = []
+    for blob in red_blobs:
+        if blob.circularity > 0.9:
+            calibration_blobs.append(blob)
+
+    # get the shapes
+    blobs = [None, None, None, None, None]
+    for blob in red_blobs:
+        if blob.circularity < 0.9:
+            blobs[0] = blob # red square
+            print(blobs[0])
+    for blob in green_blobs:
+        if blob.circularity < 0.9:
+            blobs[1] = blob # green square
+        else:
+            blobs[2] = blob # green circle
+    for blob in blue_blobs:
+        if blob.circularity < 0.9:
+            blobs[3] = blob # blue square
+        else:
+            blobs[4] = blob # blue circle
+    
+    shapes = {
+        "red square"            : blobs[0],
+        "green square"          : blobs[1],
+        "blue square"           : blobs[3],
+        "green circle"          : blobs[2],
+        "blue circle"           : blobs[4],
+        "calibration markers"   : calibration_blobs,
+    }
+    # add uc, vc to blobs, same as the center of the bounding box
+    for shape, blob in shapes.items():
+        if blob is not None:
+            blob.uc = blob.bbox[0] + (blob.bbox[2] - blob.bbox[0]) / 2
+            blob.vc = blob.bbox[1] + (blob.bbox[3] - blob.bbox[1]) / 2
     return shapes
