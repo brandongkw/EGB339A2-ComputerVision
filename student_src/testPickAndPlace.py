@@ -86,7 +86,7 @@ def gui(robot: CoppeliaRobot):
     while True:
         time.sleep(1)
         img = robot.get_image()
-        # cv2.imshow('img', img)
+        cv2.imshow('img', img)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

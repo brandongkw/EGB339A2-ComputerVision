@@ -1,5 +1,7 @@
 import math
 from typing import Dict
+import scipy.optimize
+import sympy as sp
 import numpy as np
 from coppeliaRobot import CoppeliaRobot
 import time
@@ -97,6 +99,126 @@ def Place(robotObj, target_pos: np.array):
 
 
 
+
+
+# -------- Define Kinematics Functions --------
+def rotation_matrix(axis, angle):
+    if axis == "x":
+        R = np.array([[1, 0, 0],
+                      [0, np.cos(angle), -np.sin(angle)],
+                      [0, np.sin(angle), np.cos(angle)]], dtype=np.float64)
+    elif axis == "y":
+        R = np.array([[np.cos(angle), 0, np.sin(angle)],
+                      [0, 1, 0],
+                      [-np.sin(angle), 0, np.cos(angle)]], dtype=np.float64)
+    elif axis == "z":
+        R = np.array([[np.cos(angle), -np.sin(angle), 0],
+                      [np.sin(angle), np.cos(angle), 0],
+                      [0, 0, 1]], dtype=np.float64)
+    return R
+
+def transformation_matrix(axis, angle, t):
+    T = np.eye(4)
+    R = rotation_matrix(axis, angle)
+
+    T[:3, 3] = t # [:3,3] ]
+    T[:3, :3] = R
+    return T
+
+def forward_kinematics_q(q):
+    """
+    Calculate the forward kinematics of the robot for a given set of joint angles
+
+    Parameters
+    ----------
+    q
+        A numpy array of shape (4,) of joint angles [q1, q2, q3, q4] in radians
+
+    Returns
+    -------
+    p
+        A numpy array of shape (3,) of the position of the end effector in the world
+        frame in units of mm
+
+    """
+    q1, q2, q3, q4 = q
+    q_1 = np.eye(4)
+    q_1[:3, :3] = rotation_matrix("z", q1)
+    q_2 = q_1 @ transformation_matrix("y", q2, [0, 0, L0])
+    q_3 = q_2 @ transformation_matrix("y", q3, [0, 0, L1])
+    q_4 = q_3 @ transformation_matrix("y", q4, [L2, 0, 0])
+    p = q_4 @ transformation_matrix("x", 0, [L3, 0, L4])
+    return p[:3, 3]
+def joint_mapping(th):
+    """
+    Map the physical joint angles to the kinematic joint angles
+
+    Parameters
+    ----------
+    th
+        A numpy array array of shape (3,) of physical joint angles
+        [theta1, theta2, theta3] in radians
+
+    Returns
+    -------
+    q
+        A numpy array of shape (4,) of kinematic joint angles [q1, q2, q3, q4]
+        in radians
+    """
+    theta1, theta2, theta3 = th
+    q = np.zeros(4)
+
+    q[0] = theta1
+    q[1] = theta2
+    q[2] = theta3 - theta2
+    q[3] = -theta3
+    return q
+def forward_kinematics(theta):
+    """
+    Calculate the forward kinematics of the robot for a given set of
+    physical joint angles
+
+    Parameters
+    ----------
+    theta
+        A numpy array of shape (3,) of physical joint angles [theta1, theta2, theta3]
+        in radians
+
+    Returns
+    -------
+    p
+        A numpy array of shape (3,) of the position of the end effector in the world
+        frame in millimeters
+
+    """
+    q = joint_mapping(theta)
+    return forward_kinematics_q(q)
+
+
+
+def cost(theta, pstar):
+    """
+    Cost function for inverse kinematics
+
+    Parameters
+    ----------
+    theta
+        A numpy array of shape (3,) of joint angles [theta1, theta2, theta3] (radians)
+    pstar
+        A numpy array of shape (3,) of the desired end-effector position [x, y, z] (mm)
+
+    Returns
+    -------
+    c
+        A scalar value cost which is the Euclidean distance between
+        forward kinematics and pstar
+
+    """
+    p = forward_kinematics(theta)
+    c = np.linalg.norm(p - pstar)
+
+    return c
+
 def ikine(pos: np.array) -> np.array:
     """
     Inverse kinematics using geometry
@@ -112,7 +234,6 @@ def ikine(pos: np.array) -> np.array:
         A numpy array of shape (3,) of joint angles [theta1, theta2, theta3] (radians)
 
     """
-    pass
-
-
-
+    theta = np.zeros(3)
+    theta = scipy.optimize.fmin(cost, np.array([0.0,0.0,0.0], dtype=np.float64), (pos,))
+    return theta
