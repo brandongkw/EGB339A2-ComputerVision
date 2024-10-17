@@ -34,10 +34,21 @@ def PickAndPlaceRobot(robotObj,img:mvt.Image,target_positions:Dict):
         A dictionary containing the positions in the robot's XY plane that the
         objects must be placed.
     """
+    shapes_ans = robotObj.REF_LocateShapes(img)
+    homography_answer = robotObj.REF_GetHomography(robotObj.REF_SortCalibrationMarkers(shapes_ans['calibration markers']))
+    object_positions_answer = robotObj.REF_GetObjectXY(shapes_ans, homography_answer)
+    sorted_calibration_markers_ans = []
+    for shape_name, blob in shapes_ans.items():
+        if isinstance(blob, list):  # Calibration markers are lists of blobs
+            print(f"{shape_name}:")
+            for b in blob:
+                if b is not None:  # Ensure blob is valid
+                    print(f" Bounding Box: {b.bbox}, Center: ({b.uc}, {b.vc})")
+                    sorted_calibration_markers_ans.append(b)
+    
     img = mvt.Image(img)
     mvt.idisp(img.to_float(),block=True)
     shapes = locate_shapes(img)
-    # shapes = robotObj.REF_LocateShapes(img)
     if shapes is None or 'calibration markers' not in shapes:
         raise ValueError("Failed to locate shapes or calibration markers in the image.")
 
@@ -49,7 +60,7 @@ def PickAndPlaceRobot(robotObj,img:mvt.Image,target_positions:Dict):
             print(f"{shape_name}:")
             for b in blob:
                 if b is not None:  # Ensure blob is valid
-                    print(f" Bounding Box: {b.bbox}, Center: ({b.uc}, {b.vc})")
+                    print(f" Bounding Box: {b.bbox}, Center: ({b.u}, {b.v})")
                     sorted_calibration_markers.append(b)
         else:
             print(f"{shape_name}: Center: ({blob.u}, {blob.v})")
@@ -58,9 +69,11 @@ def PickAndPlaceRobot(robotObj,img:mvt.Image,target_positions:Dict):
     # 3. Print the calibration markers for debugging
     print("\nsorted_calibration_markers:")
     for blob in sorted_calibration_markers:
+        print(f"uc: {blob.u}, vc: {blob.v}")
+    print("\nsorted_calibration_markers_ans:")
+    for blob in sorted_calibration_markers_ans:
         print(f"uc: {blob.uc}, vc: {blob.vc}")
 
-    homography_answer = robotObj.REF_GetHomography(sorted_calibration_markers)
     # 4. Calculate the homography matrix
     homography = get_homography(sorted_calibration_markers)
     # Apply homography to target_positions
@@ -68,6 +81,7 @@ def PickAndPlaceRobot(robotObj,img:mvt.Image,target_positions:Dict):
         object_positions[key] = apply_homography(object_positions[key][0], object_positions[key][1], homography)
     
     print("object_positions: ", object_positions)
+    print("object_positions_answer: ", object_positions_answer)
 
     # print("target_positions: ", target_positions)
     print("homography: ", homography)
@@ -318,10 +332,10 @@ def get_homography(blob_list):
     """
     ref_points_array = np.array([[blob.u, blob.v] for blob in blob_list], dtype=np.float32)
     ground_points = np.array([
-        [223, 22.5],
-        [223, -22.5],
+        [178, -22.5],
         [178, 22.5],
-        [178, -22.5]
+        [223, -22.5],
+        [223, 22.5],
     ], dtype=np.float32)
     homography_matrix, _ = cv2.findHomography(ref_points_array.reshape(-1, 1, 2), ground_points.reshape(-1, 1, 2))
     homography_matrix, _ = cv2.findHomography(ref_points_array.reshape(-1, 1, 2), ground_points.reshape(-1, 1, 2))
@@ -418,9 +432,4 @@ def locate_shapes(img: mvt.Image):
         "blue circle"           : blobs[4],
         "calibration markers"   : calibration_blobs,
     }
-    # add uc, vc to blobs, same as the center of the bounding box
-    for shape, blob in shapes.items():
-        if blob is not None:
-            blob.uc = blob.bbox[0] + (blob.bbox[2] - blob.bbox[0]) / 2
-            blob.vc = blob.bbox[1] + (blob.bbox[3] - blob.bbox[1]) / 2
     return shapes
