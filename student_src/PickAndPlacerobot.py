@@ -10,6 +10,14 @@ import matplotlib.pyplot as plt
 import machinevisiontoolbox as mvt
 from cv2 import findHomography
 
+L0 = 138
+L1 = 135
+L2 = 147
+L3 = 60
+L4 = -80
+
+
+
 def PickAndPlaceRobot(robotObj,img:mvt.Image,target_positions:Dict):
     """
     Reposition objects to a desired location.
@@ -27,10 +35,46 @@ def PickAndPlaceRobot(robotObj,img:mvt.Image,target_positions:Dict):
         objects must be placed.
     """
 
+    shapes = robotObj.REF_LocateShapes(img)
+    if shapes is None or 'calibration markers' not in shapes:
+        raise ValueError("Failed to locate shapes or calibration markers in the image.")
+
+    # Unpacking shapes data
+    sorted_calibration_markers = []
+    object_positions = {}
+    for shape_name, blob in shapes.items():
+        if isinstance(blob, list):  # For calibration markers which may be a list of blobs
+            print(f"{shape_name}:")
+            for b in blob:
+                if b is not None:  # Ensure blob is valid
+                    print(f"  Blob ID: {b.id}, Bounding Box: {b.bbox}, Center: ({b.uc}, {b.vc})")
+                    sorted_calibration_markers.append(b)
+        else:
+            print(f"{shape_name}: Bounding Box: {blob.bbox}, Center: ({blob.u}, {blob.v})")
+            object_positions[shape_name] = np.array([blob.u, blob.v])
+
+
+    # Print uc and vc for sorted_calibration_markers
+    print("\nsorted_calibration_markers:")
+    for blob in sorted_calibration_markers:
+        print(f"Blob ID: {blob.id}, uc: {blob.uc}, vc: {blob.vc}")
+
+    homography = get_homography(sorted_calibration_markers)
+    # for shape, pos in shapes.items():
+    #     object_positions[shape] = np.array([pos[0], pos[1]])
+    object_positions_ans = robotObj.REF_GetObjectXY(shapes, homography)
+    # Apply homography to target_positions
+    object_positions = 
+    print("object_positions: ", object_positions)
+    print("object_positions_ans: ", object_positions_ans)
+
+    # print("target_positions: ", target_positions)
+    print("homography: ", homography)
 
     for shape,place_position in target_positions.items():
-        pick_position = np.array([183,0,177])
-        place_position = np.array([183,0,177])
+        print("shape: ", shape)
+        pick_position = np.array([183, 0 ,177])
+        place_position = np.array([place_position[0],place_position[1],0])
         PickUp(robotObj,pick_position)
         Place(robotObj,place_position)
     return
@@ -48,8 +92,27 @@ def PickUp(robotObj:CoppeliaRobot, target_pos: np.array):
     4. Move the robot to a position 50mm above the target position
     This strategy will prevent dragging the object.
     '''
-    # Move the robot to a position 50mm above the target position
-    robotObj.set_suction_cup(0)
+    # # Move the robot to a position 50mm above the target position
+    # robotObj.set_suction_cup(0)
+    # pos = copy.deepcopy(target_pos)
+    # pos[2] = pos[2] + 50
+    # j1, j2, j3 = ikine(pos)
+    # robotObj.move_arm(j1, j2, j3)
+    # time.sleep(2)
+
+    # # Move the robot to the target position
+    # pos = target_pos  # You will need to change this
+    # pj1, pj2, pj3 = ikine(pos)
+    # robotObj.move_arm(pj1, pj2, pj3)
+    # time.sleep(0.5)
+
+    # # Active suction cup
+    # robotObj.set_suction_cup(1)
+    # time.sleep(0.5)
+    
+    # robotObj.move_arm(j1, j2, j3)
+    # time.sleep(0.5)
+    print("PickUp...... target_pos: ", target_pos)
     pos = copy.deepcopy(target_pos)
     pos[2] = pos[2] + 50
     j1, j2, j3 = ikine(pos)
@@ -57,15 +120,15 @@ def PickUp(robotObj:CoppeliaRobot, target_pos: np.array):
     time.sleep(2)
 
     # Move the robot to the target position
-    pos = target_pos  # You will need to change this
     pj1, pj2, pj3 = ikine(pos)
     robotObj.move_arm(pj1, pj2, pj3)
     time.sleep(0.5)
 
-    # Active suction cup
-    robotObj.set_suction_cup(1)
+    # Release the suction cup
+    robotObj.set_suction_cup(0)
     time.sleep(0.5)
     
+    # Move back to a position 50mm above the target position
     robotObj.move_arm(j1, j2, j3)
     time.sleep(0.5)
 
@@ -81,19 +144,45 @@ def Place(robotObj, target_pos: np.array):
     This strategy will prevent dragging a held object.
     '''
     # Move the robot to a position 50mm above the target position
-    pos = target_pos
+    # pos = target_pos
+    # pos = copy.deepcopy(target_pos)
+    # pos[2] = pos[2] + 50
+    # j1, j2, j3 = ikine(pos)
+    # robotObj.move_arm(j1, j2, j3)
+    # time.sleep(2)
+    # pj1, pj2, pj3 = ikine(target_pos)
+    # robotObj.move_arm(pj1, pj2, pj3)
+    # time.sleep(0.5)
+    # robotObj.set_suction_cup(0)
+    
+    # time.sleep(0.5)
+    
+    # robotObj.move_arm(j1, j2, j3)
+    # time.sleep(0.5)
+    # Move the robot to a position 50mm above the target position
     pos = copy.deepcopy(target_pos)
+    print("pos: ",pos)
     pos[2] = pos[2] + 50
-    j1, j2, j3 = ikine(pos)
+    theta = ikine(pos)
+    if theta is None:
+        raise ValueError("Inverse kinematics failed to find a valid solution for the given position.")
+    j1, j2, j3 = theta
     robotObj.move_arm(j1, j2, j3)
     time.sleep(2)
-    pj1, pj2, pj3 = ikine(target_pos)
+
+    # Move the robot to the target position
+    theta = ikine(pos)
+    if theta is None:
+        raise ValueError("Inverse kinematics failed to find a valid solution for the given position.")
+    pj1, pj2, pj3 = theta
     robotObj.move_arm(pj1, pj2, pj3)
     time.sleep(0.5)
+
+    # Release the suction cup
     robotObj.set_suction_cup(0)
-    
     time.sleep(0.5)
     
+    # Move back to a position 50mm above the target position
     robotObj.move_arm(j1, j2, j3)
     time.sleep(0.5)
 
@@ -237,3 +326,53 @@ def ikine(pos: np.array) -> np.array:
     theta = np.zeros(3)
     theta = scipy.optimize.fmin(cost, np.array([0.0,0.0,0.0], dtype=np.float64), (pos,))
     return theta
+
+
+
+
+# -------- Define Image Processing Functions --------
+def get_homography(blob_list):
+    """
+    Calculate the homography matrix for the given image warping parameters
+
+    Parameters
+    ----------
+
+    Returns
+    -------
+    homography
+        An numpy array that can be used to warp an image.
+    """
+    ref_points_array = np.array([[blob.uc, blob.vc] for blob in blob_list], dtype=np.float32)
+    ground_points = np.array([
+        [223, 22.5],
+        [223, -22.5],
+        [178, 22.5],
+        [178, -22.5]
+    ], dtype=np.float32)
+    homography_matrix, _ = findHomography(ref_points_array.reshape(-1, 1, 2), ground_points.reshape(-1, 1, 2))
+    return homography_matrix
+
+
+
+def locate_shapes(img: mvt.Image):
+    """
+    Locate shapes in the image
+
+    Parameters
+    ----------
+    img
+        A warped mvt image of the robot workspace.
+
+    Returns
+    -------
+    shapes
+        A dictionary containing the shapes in the image
+    """
+    shapes = {}
+    
+    # Locate shapes in the image
+    # shapes = robotObj.REF_LocateShapes(img)
+
+
+    return shapes

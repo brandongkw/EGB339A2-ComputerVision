@@ -94,13 +94,18 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.printonly:
+        print("Running in print-only mode")
         robot = GenericRobotAPI()
     else:
+        print("Running in CoppeliaSim mode")
         robot = CoppeliaRobot()
+    print("Robot object created")
     robot.home()
     # mp.Process(target=gui, args=(robot,)).start() 
+    print("Robot homed")
 
     warping_homography = create_homography(0,0,0,0,0)
+    print(warping_homography)
 
     img = robot.get_image()
     warped_img = img.warp_perspective(warping_homography,tile=True)[0]
