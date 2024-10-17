@@ -132,9 +132,13 @@ def PickUp(robotObj:CoppeliaRobot, target_pos: np.array):
     time.sleep(0.5)  # Allow suction time
 
     # 4. Move back to the position 50mm above the target position
-    print(f"Moving back to above the target position: {pos_above}")
-    robotObj.move_arm(j1, j2, j3)  # Return to the position 50mm above
-    time.sleep(0.5)
+    pos_safe = copy.deepcopy(target_pos)
+    pos_safe[2] += 50  # Move 150mm above the target position
+    j1, j2, j3 = ikine(pos_safe)  # Compute joint angles for safe height
+
+    print(f"Moving to 150mm above the target to avoid collision: {pos_safe}")
+    robotObj.move_arm(j1, j2, j3)  # Move arm to safe height
+    time.sleep(1)
     
 def Place(robotObj, target_pos: np.array):
     ''' 
