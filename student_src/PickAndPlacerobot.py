@@ -8,7 +8,7 @@ import time
 import copy
 import matplotlib.pyplot as plt
 import machinevisiontoolbox as mvt
-from cv2 import findHomography
+import cv2
 
 L0 = 138
 L1 = 135
@@ -35,49 +35,58 @@ def PickAndPlaceRobot(robotObj,img:mvt.Image,target_positions:Dict):
         objects must be placed.
     """
 
+    # 1. Locate shapes in the image
     shapes = robotObj.REF_LocateShapes(img)
     if shapes is None or 'calibration markers' not in shapes:
         raise ValueError("Failed to locate shapes or calibration markers in the image.")
 
-    # Unpacking shapes data
+    # 2. Unpack shapes data: separate calibration markers and object positions
     sorted_calibration_markers = []
     object_positions = {}
     for shape_name, blob in shapes.items():
-        if isinstance(blob, list):  # For calibration markers which may be a list of blobs
+        if isinstance(blob, list):  # Calibration markers are lists of blobs
             print(f"{shape_name}:")
             for b in blob:
-                if b is not None:  # Ensure blob is valid
-                    print(f"  Blob ID: {b.id}, Bounding Box: {b.bbox}, Center: ({b.uc}, {b.vc})")
+                if b is not None:  # Ensure valid blobs are added
+                    print(f"  Blob ID: {b.id}, Center: ({b.uc}, {b.vc})")
                     sorted_calibration_markers.append(b)
         else:
-            print(f"{shape_name}: Bounding Box: {blob.bbox}, Center: ({blob.u}, {blob.v})")
+            print(f"{shape_name}: Center: ({blob.u}, {blob.v})")
             object_positions[shape_name] = np.array([blob.u, blob.v])
 
-
-    # Print uc and vc for sorted_calibration_markers
+    # 3. Print the calibration markers for debugging
     print("\nsorted_calibration_markers:")
     for blob in sorted_calibration_markers:
         print(f"Blob ID: {blob.id}, uc: {blob.uc}, vc: {blob.vc}")
 
+    # 4. Calculate the homography matrix
     homography = get_homography(sorted_calibration_markers)
-    # for shape, pos in shapes.items():
-    #     object_positions[shape] = np.array([pos[0], pos[1]])
-    object_positions_ans = robotObj.REF_GetObjectXY(shapes, homography)
-    # Apply homography to target_positions
-    object_positions = 
-    print("object_positions: ", object_positions)
-    print("object_positions_ans: ", object_positions_ans)
+    print("Homography Matrix:\n", homography)
 
-    # print("target_positions: ", target_positions)
-    print("homography: ", homography)
+    # 5. Transform object positions to the robot's XY plane
+    object_positions_robot = robotObj.REF_GetObjectXY(object_positions, homography)
+    print("Object Positions in Robot's XY Plane:\n", object_positions_robot)
 
-    for shape,place_position in target_positions.items():
-        print("shape: ", shape)
-        pick_position = np.array([183, 0 ,177])
-        place_position = np.array([place_position[0],place_position[1],0])
-        PickUp(robotObj,pick_position)
-        Place(robotObj,place_position)
-    return
+    # 6. Pick and place objects according to the target positions
+    for shape, target_pos in target_positions.items():
+        if shape not in object_positions_robot:
+            print(f"Warning: {shape} not detected, skipping...")
+            continue
+        
+        # Get the pick position for the current object
+        pick_position = np.array([*object_positions_robot[shape], 0])  # z = 0 for 2D workspace
+
+        # Add height (z) to target position for placement
+        place_position = np.array([*target_pos, 0])
+
+        # Print debug info
+        print(f"Picking {shape} from {pick_position} and placing at {place_position}")
+
+        # Perform pick and place operations
+        PickUp(robotObj, pick_position)
+        Place(robotObj, place_position)
+
+    print("Pick-and-place operation complete.")
 
 # Note: The remainder of the file is a template on how we would solve this task.
 # You are free to use our template, or to write your own code.
@@ -92,46 +101,31 @@ def PickUp(robotObj:CoppeliaRobot, target_pos: np.array):
     4. Move the robot to a position 50mm above the target position
     This strategy will prevent dragging the object.
     '''
-    # # Move the robot to a position 50mm above the target position
-    # robotObj.set_suction_cup(0)
-    # pos = copy.deepcopy(target_pos)
-    # pos[2] = pos[2] + 50
-    # j1, j2, j3 = ikine(pos)
-    # robotObj.move_arm(j1, j2, j3)
-    # time.sleep(2)
+    # 1. Move to a position 50mm above the target position
+    pos_above = copy.deepcopy(target_pos)
+    pos_above[2] += 50  # 50mm above the target
+    j1, j2, j3 = ikine(pos_above)  # Compute joint angles for this position
 
-    # # Move the robot to the target position
-    # pos = target_pos  # You will need to change this
-    # pj1, pj2, pj3 = ikine(pos)
-    # robotObj.move_arm(pj1, pj2, pj3)
-    # time.sleep(0.5)
+    print(f"Moving to above the target position: {pos_above}")
+    robotObj.move_arm(j1, j2, j3)  # Move robot arm to this position
+    time.sleep(2)  # Allow time for movement
 
-    # # Active suction cup
-    # robotObj.set_suction_cup(1)
-    # time.sleep(0.5)
-    
-    # robotObj.move_arm(j1, j2, j3)
-    # time.sleep(0.5)
-    print("PickUp...... target_pos: ", target_pos)
-    pos = copy.deepcopy(target_pos)
-    pos[2] = pos[2] + 50
-    j1, j2, j3 = ikine(pos)
-    robotObj.move_arm(j1, j2, j3)
-    time.sleep(2)
-
-    # Move the robot to the target position
-    pj1, pj2, pj3 = ikine(pos)
-    robotObj.move_arm(pj1, pj2, pj3)
+    # 2. Move to the target position
+    j1, j2, j3 = ikine(target_pos)  # Compute joint angles for the actual target position
+    print(f"Moving to the target position: {target_pos}")
+    robotObj.move_arm(j1, j2, j3)  # Move to the target
     time.sleep(0.5)
 
-    # Release the suction cup
-    robotObj.set_suction_cup(0)
+    # 3. Activate suction cup to pick up the object
+    print("Activating suction cup.")
+    robotObj.set_suction_cup(1)  # Suction ON
+    time.sleep(0.5)  # Allow suction time
+
+    # 4. Move back to the position 50mm above the target position
+    print(f"Moving back to above the target position: {pos_above}")
+    robotObj.move_arm(j1, j2, j3)  # Return to the position 50mm above
     time.sleep(0.5)
     
-    # Move back to a position 50mm above the target position
-    robotObj.move_arm(j1, j2, j3)
-    time.sleep(0.5)
-
 def Place(robotObj, target_pos: np.array):
     ''' 
     This function should move the robot to the given position and release a
@@ -143,52 +137,37 @@ def Place(robotObj, target_pos: np.array):
     4. Move the robot to a position 50mm above the target position
     This strategy will prevent dragging a held object.
     '''
-    # Move the robot to a position 50mm above the target position
-    # pos = target_pos
-    # pos = copy.deepcopy(target_pos)
-    # pos[2] = pos[2] + 50
-    # j1, j2, j3 = ikine(pos)
-    # robotObj.move_arm(j1, j2, j3)
-    # time.sleep(2)
-    # pj1, pj2, pj3 = ikine(target_pos)
-    # robotObj.move_arm(pj1, pj2, pj3)
-    # time.sleep(0.5)
-    # robotObj.set_suction_cup(0)
-    
-    # time.sleep(0.5)
-    
-    # robotObj.move_arm(j1, j2, j3)
-    # time.sleep(0.5)
-    # Move the robot to a position 50mm above the target position
-    pos = copy.deepcopy(target_pos)
-    print("pos: ",pos)
-    pos[2] = pos[2] + 50
-    theta = ikine(pos)
-    if theta is None:
-        raise ValueError("Inverse kinematics failed to find a valid solution for the given position.")
-    j1, j2, j3 = theta
+# 1. Move the robot to a position 50mm above the target position
+    pos_above = copy.deepcopy(target_pos)
+    pos_above[2] += 50  # Add 50mm in z-direction
+    j1, j2, j3 = ikine(pos_above)
+
+    if j1 is None or j2 is None or j3 is None:
+        raise ValueError("Inverse kinematics failed for the above-target position.")
+
+    print(f"Moving to 50mm above the target: {pos_above}")
     robotObj.move_arm(j1, j2, j3)
-    time.sleep(2)
+    time.sleep(1)  # Allow time for the movement
 
-    # Move the robot to the target position
-    theta = ikine(pos)
-    if theta is None:
-        raise ValueError("Inverse kinematics failed to find a valid solution for the given position.")
-    pj1, pj2, pj3 = theta
-    robotObj.move_arm(pj1, pj2, pj3)
-    time.sleep(0.5)
+    # 2. Move the robot to the target position
+    j1, j2, j3 = ikine(target_pos)
+    if j1 is None or j2 is None or j3 is None:
+        raise ValueError("Inverse kinematics failed for the target position.")
 
-    # Release the suction cup
-    robotObj.set_suction_cup(0)
-    time.sleep(0.5)
-    
-    # Move back to a position 50mm above the target position
+    print(f"Moving to the target position: {target_pos}")
     robotObj.move_arm(j1, j2, j3)
     time.sleep(0.5)
 
+    # 3. Release the suction cup to drop the object
+    print("Releasing the suction cup.")
+    robotObj.set_suction_cup(0)  # Deactivate suction
+    time.sleep(0.5)
 
-
-
+    # 4. Move back to the position 50mm above the target position
+    print(f"Moving back to 50mm above the target: {pos_above}")
+    j1, j2, j3 = ikine(pos_above)
+    robotObj.move_arm(j1, j2, j3)
+    time.sleep(0.5)
 
 # -------- Define Kinematics Functions --------
 def rotation_matrix(axis, angle):
@@ -238,6 +217,7 @@ def forward_kinematics_q(q):
     q_4 = q_3 @ transformation_matrix("y", q4, [L2, 0, 0])
     p = q_4 @ transformation_matrix("x", 0, [L3, 0, L4])
     return p[:3, 3]
+
 def joint_mapping(th):
     """
     Map the physical joint angles to the kinematic joint angles
@@ -262,6 +242,7 @@ def joint_mapping(th):
     q[2] = theta3 - theta2
     q[3] = -theta3
     return q
+
 def forward_kinematics(theta):
     """
     Calculate the forward kinematics of the robot for a given set of
@@ -282,8 +263,6 @@ def forward_kinematics(theta):
     """
     q = joint_mapping(theta)
     return forward_kinematics_q(q)
-
-
 
 def cost(theta, pstar):
     """
@@ -328,8 +307,6 @@ def ikine(pos: np.array) -> np.array:
     return theta
 
 
-
-
 # -------- Define Image Processing Functions --------
 def get_homography(blob_list):
     """
@@ -350,10 +327,8 @@ def get_homography(blob_list):
         [178, 22.5],
         [178, -22.5]
     ], dtype=np.float32)
-    homography_matrix, _ = findHomography(ref_points_array.reshape(-1, 1, 2), ground_points.reshape(-1, 1, 2))
+    homography_matrix, _ = cv2.findHomography(ref_points_array.reshape(-1, 1, 2), ground_points.reshape(-1, 1, 2))
     return homography_matrix
-
-
 
 def locate_shapes(img: mvt.Image):
     """
