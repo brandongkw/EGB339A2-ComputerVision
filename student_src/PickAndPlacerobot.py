@@ -34,20 +34,20 @@ def PickAndPlaceRobot(robotObj,img:mvt.Image,target_positions:Dict):
         A dictionary containing the positions in the robot's XY plane that the
         objects must be placed.
     """
-    shapes_ans = robotObj.REF_LocateShapes(img)
-    homography_answer = robotObj.REF_GetHomography(robotObj.REF_SortCalibrationMarkers(shapes_ans['calibration markers']))
-    object_positions_answer = robotObj.REF_GetObjectXY(shapes_ans, homography_answer)
-    sorted_calibration_markers_ans = []
-    for shape_name, blob in shapes_ans.items():
-        if isinstance(blob, list):  # Calibration markers are lists of blobs
-            print(f"{shape_name}:")
-            for b in blob:
-                if b is not None:  # Ensure blob is valid
-                    print(f" Bounding Box: {b.bbox}, Center: ({b.uc}, {b.vc})")
-                    sorted_calibration_markers_ans.append(b)
+    # shapes_ans = robotObj.REF_LocateShapes(img)
+    # homography_answer = robotObj.REF_GetHomography(robotObj.REF_SortCalibrationMarkers(shapes_ans['calibration markers']))
+    # object_positions_answer = robotObj.REF_GetObjectXY(shapes_ans, homography_answer)
+    # sorted_calibration_markers_ans = []
+    # for shape_name, blob in shapes_ans.items():
+    #     if isinstance(blob, list):  # Calibration markers are lists of blobs
+    #         print(f"{shape_name}:")
+    #         for b in blob:
+    #             if b is not None:  # Ensure blob is valid
+    #                 print(f" Bounding Box: {b.bbox}, Center: ({b.uc}, {b.vc})")
+    #                 sorted_calibration_markers_ans.append(b)
     
     img = mvt.Image(img)
-    mvt.idisp(img.to_float(),block=True)
+    # mvt.idisp(img.to_float(),block=True)
     shapes = locate_shapes(img)
     if shapes is None or 'calibration markers' not in shapes:
         raise ValueError("Failed to locate shapes or calibration markers in the image.")
@@ -63,29 +63,34 @@ def PickAndPlaceRobot(robotObj,img:mvt.Image,target_positions:Dict):
                     print(f" Bounding Box: {b.bbox}, Center: ({b.u}, {b.v})")
                     sorted_calibration_markers.append(b)
         else:
-            print(f"{shape_name}: Center: ({blob.u}, {blob.v})")
-            object_positions[shape_name] = np.array([blob.u, blob.v])
+            print(f"{shape_name}: Center: ({blob.centroid[0]}, {blob.centroid[1]})")
+            object_positions[shape_name] = np.array([round(blob.centroid[0], 5), round(blob.centroid[1], 5)])
 
     # 3. Print the calibration markers for debugging
     print("\nsorted_calibration_markers:")
     for blob in sorted_calibration_markers:
         print(f"uc: {blob.u}, vc: {blob.v}")
     print("\nsorted_calibration_markers_ans:")
-    for blob in sorted_calibration_markers_ans:
-        print(f"uc: {blob.uc}, vc: {blob.vc}")
+    # for blob in sorted_calibration_markers_ans:
+    #     print(f"uc: {blob.uc}, vc: {blob.vc}")
 
     # 4. Calculate the homography matrix
     homography = get_homography(sorted_calibration_markers)
     # Apply homography to target_positions
     for key in object_positions.keys():
         object_positions[key] = apply_homography(object_positions[key][0], object_positions[key][1], homography)
-    
+    # object_positions['green square'] = np.array([300, 0], dtype=np.float32)
+
+    # # Print the unified values
+    # for key, value in object_positions.items():
+    #     print(f"{key}: {value}")
+
     print("object_positions: ", object_positions)
-    print("object_positions_answer: ", object_positions_answer)
+    # print("object_positions_answer: ", object_positions_answer)
 
     # print("target_positions: ", target_positions)
     print("homography: ", homography)
-    print("homography_answer: ", homography_answer)
+    # print("homography_answer: ", homography_answer)
 
     for shape,place_position in target_positions.items():
         print("shape: ", shape)
@@ -118,7 +123,7 @@ def PickUp(robotObj:CoppeliaRobot, target_pos: np.array):
 
     print(f"Moving to above the target position: {pos_above}")
     robotObj.move_arm(j1, j2, j3)  # Move robot arm to this position
-    time.sleep(2)  # Allow time for movement
+    time.sleep(3)  # Allow time for movement
 
     # 2. Move to the target position
     j1, j2, j3 = ikine(target_pos)  # Compute joint angles for the actual target position
@@ -161,7 +166,7 @@ def Place(robotObj, target_pos: np.array):
 
     print(f"Moving to 50mm above the target: {pos_above}")
     robotObj.move_arm(j1, j2, j3)
-    time.sleep(1)  # Allow time for the movement
+    time.sleep(2.5)  # Allow time for the movement
 
     # 2. Move the robot to the target position
     j1, j2, j3 = ikine(target_pos)
@@ -349,6 +354,7 @@ def apply_homography(x, y, homography):
     point = np.array([[x, y]], dtype='float32')
     point = np.array([point])
     transformed_point = cv2.perspectiveTransform(point, homography)
+    transformed_point = np.round(transformed_point / 5) * 5
     return transformed_point[0][0]
 
 
