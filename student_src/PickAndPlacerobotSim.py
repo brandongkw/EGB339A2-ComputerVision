@@ -138,7 +138,7 @@ def PickUp(robotObj:CoppeliaRobot, target_pos: np.array):
 
     # 4. Move back to the position 50mm above the target position
     pos_safe = copy.deepcopy(target_pos)
-    pos_safe[2] += 50  # Move 150mm above the target position
+    pos_safe[2] += 50  # Move 50mm above the target position
     j1, j2, j3 = ikine(pos_safe)  # Compute joint angles for safe height
 
     print(f"Moving to 150mm above the target to avoid collision: {pos_safe}")

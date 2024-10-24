@@ -9,7 +9,7 @@ import argparse
 
 from coppeliaRobot import CoppeliaRobot
 from genericRobotAPI import GenericRobotAPI
-from PickAndPlacerobot import PickAndPlaceRobot
+from PickAndPlacerobotReal import PickAndPlaceRobot
 import multiprocessing as mp
 import cv2
 import numpy as np
