@@ -15,7 +15,6 @@ L1 = 135
 L2 = 147
 L3 = 60
 L4 = -80
-# L4 = -70
 
 
 
@@ -96,9 +95,9 @@ def PickAndPlaceRobot(robotObj,img:mvt.Image,target_positions:Dict):
     for shape,place_position in target_positions.items():
         print("shape: ", shape)
         # find the pick position from object_positions
-        pick_position = np.array([object_positions[shape][0],object_positions[shape][1],4])
+        pick_position = np.array([object_positions[shape][0],object_positions[shape][1],0])
         print("shape_pos: ", pick_position)
-        place_position = np.array([target_positions[shape][0],target_positions[shape][1],4])
+        place_position = np.array([target_positions[shape][0],target_positions[shape][1],0])
         print("Move to pos: ", place_position)
         PickUp(robotObj,pick_position)
         Place(robotObj,place_position)
@@ -139,7 +138,7 @@ def PickUp(robotObj:CoppeliaRobot, target_pos: np.array):
 
     # 4. Move back to the position 50mm above the target position
     pos_safe = copy.deepcopy(target_pos)
-    pos_safe[2] += 50  # Move 50mm above the target position
+    pos_safe[2] += 50  # Move 150mm above the target position
     j1, j2, j3 = ikine(pos_safe)  # Compute joint angles for safe height
 
     print(f"Moving to 150mm above the target to avoid collision: {pos_safe}")
@@ -342,10 +341,10 @@ def get_homography(blob_list):
     """
     ref_points_array = np.array([[blob.u, blob.v] for blob in blob_list], dtype=np.float32)
     ground_points = np.array([
-        [297.7, 154.8],
-        [297.7, -165.2],
-        [117.7, -165.2],
-        [117.7, 154.8],
+        [178, -22.5],
+        [178, 22.5],
+        [223, -22.5],
+        [223, 22.5],
     ], dtype=np.float32)
     homography_matrix, _ = cv2.findHomography(ref_points_array.reshape(-1, 1, 2), ground_points.reshape(-1, 1, 2))
     homography_matrix, _ = cv2.findHomography(ref_points_array.reshape(-1, 1, 2), ground_points.reshape(-1, 1, 2))
@@ -385,10 +384,10 @@ def locate_shapes(img: mvt.Image):
     red_lower2 = np.array([170, 120, 50])
     red_upper2 = np.array([180, 255, 255])
 
-    greend_lower = np.array([40, 80, 80])
+    greend_lower = np.array([40, 40, 40])
     greend_upper = np.array([90, 255, 255])
 
-    blue_lower = np.array([90, 50, 80])
+    blue_lower = np.array([90, 40, 40])
     blue_upper = np.array([140, 255, 255])
 
     # Creating two masks for red color and combining them
@@ -402,34 +401,15 @@ def locate_shapes(img: mvt.Image):
     # Creating mask for blue color
     blue_mask = cv2.inRange(img, blue_lower, blue_upper)
     
-    # Closing and opening
-    red_mask = cv2.morphologyEx(red_mask, cv2.MORPH_CLOSE, np.ones((5, 5)))
-    green_mask = cv2.morphologyEx(green_mask, cv2.MORPH_CLOSE, np.ones((5, 5)))
-    blue_mask = cv2.morphologyEx(blue_mask, cv2.MORPH_OPEN, np.ones((5, 5)))
-
-
-
-
     # Convet the masks to blobs
     red_mask = mvt.Image(red_mask)
     green_mask = mvt.Image(green_mask)
     blue_mask = mvt.Image(blue_mask)
 
-
     # get the red, green, and blue channels
     red_blobs = red_mask.blobs()
-    print(red_blobs)
     green_blobs = green_mask.blobs()
-    print(green_blobs)
     blue_blobs = blue_mask.blobs()
-    # filter blue blobs, largest 3 area blobs remains
-    # blue_blobs = sorted(blue_blobs, key=lambda x: x.area, reverse=True)[:3]
-    print(blue_blobs)
-
-    # Disp
-    red_mask.disp(block=True)
-    # green_mask.disp(block=True)
-    blue_mask.disp(block=True)
 
     # get the calibration markers
     calibration_blobs = []
@@ -438,37 +418,28 @@ def locate_shapes(img: mvt.Image):
             calibration_blobs.append(blob)
 
     # get the shapes
-    blobs = [None, None, None, None, None, None, None, None]
+    blobs = [None, None, None, None, None]
     for blob in red_blobs:
-        if 0.7 < blob.circularity < 0.9:
+        if blob.circularity < 0.9:
             blobs[0] = blob # red square
-        if blob.circularity < 0.7:
-            blobs[5] = blob # red triangle
-
+            print(blobs[0])
     for blob in green_blobs:
-        if 0.7 < blob.circularity < 0.9:
+        if blob.circularity < 0.9:
             blobs[1] = blob # green square
-        elif blob.circularity < 0.7:
-            blobs[6] = blob # green triangle
         else:
             blobs[2] = blob # green circle
     for blob in blue_blobs:
-        if 0.7 < blob.circularity < 0.9:
+        if blob.circularity < 0.9:
             blobs[3] = blob # blue square
-        elif blob.circularity < 0.7:
-            blobs[7] = blob # blue triangle
         else:
             blobs[4] = blob # blue circle
     
     shapes = {
         "red square"            : blobs[0],
         "green square"          : blobs[1],
-        "green circle"          : blobs[2],
         "blue square"           : blobs[3],
+        "green circle"          : blobs[2],
         "blue circle"           : blobs[4],
-        "red triangle"           : blobs[5],
-        "green triangle"           : blobs[6],
-        "blue triangle"           : blobs[7],
         "calibration markers"   : calibration_blobs,
     }
     return shapes

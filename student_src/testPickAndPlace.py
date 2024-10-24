@@ -107,7 +107,8 @@ if __name__ == "__main__":
     warping_homography = create_homography(0,0,0,0,0)
     print(warping_homography)
 
-    img = robot.get_image()
+    img = mvt.Image.Read(f'0_original.png')
+    # img = robot.get_image()
     warped_img = img.warp_perspective(warping_homography,tile=True)[0]
     # mvt.idisp(warped_img.to_float(),block=True)
     target_positions = {
@@ -115,7 +116,10 @@ if __name__ == "__main__":
         "green square"  : np.array([260, 170],dtype=np.float64),
         "red square"    : np.array([300, 100],dtype=np.float64),
         "blue circle"   : np.array([130, 150],dtype=np.float64),
+        "green triangle"  : np.array([300,   0],dtype=np.float64),
         "green circle"  : np.array([300,   0],dtype=np.float64),
+        "red triangle"  : np.array([300,   0],dtype=np.float64),
+        "blue triangle"  : np.array([300,   0],dtype=np.float64),
     }
 
     PickAndPlaceRobot(robot,warped_img,target_positions)
