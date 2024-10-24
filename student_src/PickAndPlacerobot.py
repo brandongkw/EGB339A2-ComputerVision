@@ -64,7 +64,7 @@ def PickAndPlaceRobot(robotObj,img:mvt.Image,target_positions:Dict):
 
 # Note: The remainder of the file is a template on how we would solve this task.
 # You are free to use our template, or to write your own code.
-def PickUp(robotObj:CoppeliaRobot, target_pos: np.array):
+def PickUp(robotObj, target_pos: np.array):
     '''
     This function should move the robot to the given position and pick up 
     an item if present.
@@ -75,22 +75,33 @@ def PickUp(robotObj:CoppeliaRobot, target_pos: np.array):
     4. Move the robot to a position 50mm above the target position
     This strategy will prevent dragging the object.
     '''
+    # 1. Move to a position 50mm above the target position
     pos_above = copy.deepcopy(target_pos)
-    pos_above[2] += 50  # Move to 50mm above the target position
-    
-    j1, j2, j3 = ikine(pos_above)  # Calculate joint angles to move above
-    robotObj.move_arm(j1, j2, j3)
-    time.sleep(1)
-    
-    j1, j2, j3 = ikine(target_pos)  # Move to the target position
-    robotObj.move_arm(j1, j2, j3)
+    pos_above[2] += 50  # 50mm above the target
+    j1, j2, j3 = ikine(pos_above)  # Compute joint angles for this position
+
+    print(f"Moving to above the target position: {pos_above}")
+    robotObj.move_arm(j1, j2, j3)  # Move robot arm to this position
+    time.sleep(3)  # Allow time for movement
+
+    # 2. Move to the target position
+    j1, j2, j3 = ikine(target_pos)  # Compute joint angles for the actual target position
+    print(f"Moving to the target position: {target_pos}")
+    robotObj.move_arm(j1, j2, j3)  # Move to the target
     time.sleep(0.5)
-    
-    robotObj.set_suction_cup(1)  # Activate suction cup to grab object
-    time.sleep(0.5)
-    
-    # Move back to 50mm above the target to avoid dragging
-    robotObj.move_arm(*ikine(pos_above))
+
+    # 3. Activate suction cup to pick up the object
+    print("Activating suction cup.")
+    robotObj.set_suction_cup(1)  # Suction ON
+    time.sleep(0.5)  # Allow suction time
+
+    # 4. Move back to the position 50mm above the target position
+    pos_safe = copy.deepcopy(target_pos)
+    pos_safe[2] += 70  # Move 50mm above the target position
+    j1, j2, j3 = ikine(pos_safe)  # Compute joint angles for safe height
+
+    print(f"Moving to 70mm above the target to avoid collision: {pos_safe}")
+    robotObj.move_arm(j1, j2, j3)  # Move arm to safe height
     time.sleep(1)
     
 def Place(robotObj, target_pos: np.array):
@@ -104,21 +115,37 @@ def Place(robotObj, target_pos: np.array):
     4. Move the robot to a position 50mm above the target position
     This strategy will prevent dragging a held object.
     '''
+# 1. Move the robot to a position 50mm above the target position
     pos_above = copy.deepcopy(target_pos)
-    pos_above[2] += 50  # Move to 50mm above the target position
-    
-    robotObj.move_arm(*ikine(pos_above))
-    time.sleep(1)
-    
-    robotObj.move_arm(*ikine(target_pos))  # Move to the exact target position
+    pos_above[2] += 50  # Add 50mm in z-direction
+    j1, j2, j3 = ikine(pos_above)
+
+    if j1 is None or j2 is None or j3 is None:
+        raise ValueError("Inverse kinematics failed for the above-target position.")
+
+    print(f"Moving to 50mm above the target: {pos_above}")
+    robotObj.move_arm(j1, j2, j3)
+    time.sleep(2.5)  # Allow time for the movement
+
+    # 2. Move the robot to the target position
+    j1, j2, j3 = ikine(target_pos)
+    if j1 is None or j2 is None or j3 is None:
+        raise ValueError("Inverse kinematics failed for the target position.")
+
+    print(f"Moving to the target position: {target_pos}")
+    robotObj.move_arm(j1, j2, j3)
     time.sleep(0.5)
-    
-    robotObj.set_suction_cup(0)  # Deactivate suction to release object
+
+    # 3. Release the suction cup to drop the object
+    print("Releasing the suction cup.")
+    robotObj.set_suction_cup(0)  # Deactivate suction
     time.sleep(0.5)
-    
-    # Move back to 50mm above to avoid collisions
-    robotObj.move_arm(*ikine(pos_above))
-    time.sleep(1)
+
+    # 4. Move back to the position 50mm above the target position
+    print(f"Moving back to 50mm above the target: {pos_above}")
+    j1, j2, j3 = ikine(pos_above)
+    robotObj.move_arm(j1, j2, j3)
+    time.sleep(0.5)
 
 # -------- Define Kinematics Functions --------
 def rotation_matrix(axis, angle):
