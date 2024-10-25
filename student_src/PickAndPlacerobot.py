@@ -14,7 +14,8 @@ L0 = 138
 L1 = 135
 L2 = 147
 L3 = 60
-L4 = -80
+# L4 = -80
+L4 = -70 # Real World
 
 
 
@@ -95,9 +96,9 @@ def PickAndPlaceRobot(robotObj,img:mvt.Image,target_positions:Dict):
     for shape,place_position in target_positions.items():
         print("shape: ", shape)
         # find the pick position from object_positions
-        pick_position = np.array([object_positions[shape][0],object_positions[shape][1],0])
+        pick_position = np.array([object_positions[shape][0],object_positions[shape][1],4])
         print("shape_pos: ", pick_position)
-        place_position = np.array([target_positions[shape][0],target_positions[shape][1],0])
+        place_position = np.array([target_positions[shape][0],target_positions[shape][1],4])
         print("Move to pos: ", place_position)
         PickUp(robotObj,pick_position)
         Place(robotObj,place_position)
@@ -123,18 +124,18 @@ def PickUp(robotObj:CoppeliaRobot, target_pos: np.array):
 
     print(f"Moving to above the target position: {pos_above}")
     robotObj.move_arm(j1, j2, j3)  # Move robot arm to this position
-    time.sleep(3)  # Allow time for movement
+    # time.sleep(3)  # Allow time for movement
 
     # 2. Move to the target position
     j1, j2, j3 = ikine(target_pos)  # Compute joint angles for the actual target position
     print(f"Moving to the target position: {target_pos}")
     robotObj.move_arm(j1, j2, j3)  # Move to the target
-    time.sleep(0.5)
+    # time.sleep(0.5)
 
     # 3. Activate suction cup to pick up the object
     print("Activating suction cup.")
-    robotObj.set_suction_cup(1)  # Suction ON
-    time.sleep(0.5)  # Allow suction time
+    robotObj.set_suction_cup(1)  # Suction ON # Real World
+    # time.sleep(0.5)  # Allow suction time
 
     # 4. Move back to the position 50mm above the target position
     pos_safe = copy.deepcopy(target_pos)
@@ -143,7 +144,7 @@ def PickUp(robotObj:CoppeliaRobot, target_pos: np.array):
 
     print(f"Moving to 150mm above the target to avoid collision: {pos_safe}")
     robotObj.move_arm(j1, j2, j3)  # Move arm to safe height
-    time.sleep(1)
+    # time.sleep(1)
     
 def Place(robotObj, target_pos: np.array):
     ''' 
@@ -166,7 +167,7 @@ def Place(robotObj, target_pos: np.array):
 
     print(f"Moving to 50mm above the target: {pos_above}")
     robotObj.move_arm(j1, j2, j3)
-    time.sleep(2.5)  # Allow time for the movement
+    # time.sleep(2.5)  # Allow time for the movement
 
     # 2. Move the robot to the target position
     j1, j2, j3 = ikine(target_pos)
@@ -175,18 +176,18 @@ def Place(robotObj, target_pos: np.array):
 
     print(f"Moving to the target position: {target_pos}")
     robotObj.move_arm(j1, j2, j3)
-    time.sleep(0.5)
+    # time.sleep(0.5)
 
     # 3. Release the suction cup to drop the object
     print("Releasing the suction cup.")
     robotObj.set_suction_cup(0)  # Deactivate suction
-    time.sleep(0.5)
+    # time.sleep(0.5)
 
     # 4. Move back to the position 50mm above the target position
     print(f"Moving back to 50mm above the target: {pos_above}")
     j1, j2, j3 = ikine(pos_above)
     robotObj.move_arm(j1, j2, j3)
-    time.sleep(0.5)
+    # time.sleep(0.5)
 
 # -------- Define Kinematics Functions --------
 def rotation_matrix(axis, angle):
@@ -321,9 +322,25 @@ def ikine(pos: np.array) -> np.array:
         A numpy array of shape (3,) of joint angles [theta1, theta2, theta3] (radians)
 
     """
+    
     theta = np.zeros(3)
-    theta = scipy.optimize.fmin(cost, np.array([0.0,0.0,0.0], dtype=np.float64), (pos,))
+    x,y,z = pos
+    theta[0] = np.arctan2(y, x)
+    b = L0 + L4 - z
+    r = np.sqrt(x**2 + y**2)
+    a = r - L3
+    delta = np.arctan2( a, b) 
+    c = np.sqrt(a**2 + b**2)
+    print((-2 * L1 * c), (-2 * L1 * L2))
+    beta = np.arccos(np.clip((L2**2 - L1**2 - c**2) / (-2 * L1 * c), -1, 1))
+    alpha = np.arccos(np.clip((c**2 - L1**2 - L2**2) / (-2 * L1 * L2), -1, 1))
+    theta[1] = np.pi - beta - delta
+    theta[2] = np.pi / 2 - alpha + theta[1]
+
     return theta
+    # theta = np.zeros(3)
+    # theta = scipy.optimize.fmin(cost, np.array([0.0,0.0,0.0], dtype=np.float64), (pos,))
+    # return theta
 
 
 # -------- Define Image Processing Functions --------
@@ -341,10 +358,10 @@ def get_homography(blob_list):
     """
     ref_points_array = np.array([[blob.u, blob.v] for blob in blob_list], dtype=np.float32)
     ground_points = np.array([
-        [178, -22.5],
-        [178, 22.5],
-        [223, -22.5],
-        [223, 22.5],
+        [117.7, 154.8],
+        [297.7, 154.8],
+        [297.7, -165.2],
+        [117.7, -165.2],
     ], dtype=np.float32)
     homography_matrix, _ = cv2.findHomography(ref_points_array.reshape(-1, 1, 2), ground_points.reshape(-1, 1, 2))
     homography_matrix, _ = cv2.findHomography(ref_points_array.reshape(-1, 1, 2), ground_points.reshape(-1, 1, 2))
@@ -384,10 +401,10 @@ def locate_shapes(img: mvt.Image):
     red_lower2 = np.array([170, 120, 50])
     red_upper2 = np.array([180, 255, 255])
 
-    greend_lower = np.array([40, 40, 40])
+    greend_lower = np.array([40, 80, 80])
     greend_upper = np.array([90, 255, 255])
 
-    blue_lower = np.array([90, 40, 40])
+    blue_lower = np.array([90, 50, 50])
     blue_upper = np.array([140, 255, 255])
 
     # Creating two masks for red color and combining them
@@ -401,45 +418,89 @@ def locate_shapes(img: mvt.Image):
     # Creating mask for blue color
     blue_mask = cv2.inRange(img, blue_lower, blue_upper)
     
+    # Closing and opening
+    red_mask = cv2.morphologyEx(red_mask, cv2.MORPH_CLOSE, np.ones((5, 5)))
+    green_mask = cv2.morphologyEx(green_mask, cv2.MORPH_CLOSE, np.ones((5, 5)))
+    blue_mask = cv2.morphologyEx(blue_mask, cv2.MORPH_OPEN, np.ones((5, 5)))
+
+
+
+
     # Convet the masks to blobs
     red_mask = mvt.Image(red_mask)
     green_mask = mvt.Image(green_mask)
     blue_mask = mvt.Image(blue_mask)
 
+
     # get the red, green, and blue channels
     red_blobs = red_mask.blobs()
+    print(red_blobs)
     green_blobs = green_mask.blobs()
+    print(green_blobs)
     blue_blobs = blue_mask.blobs()
+    blue_blobs = [blob for blob in blue_blobs if blob.area > 700]
+    # filter blue blobs, largest 3 area blobs remains
+    # blue_blobs = sorted(blue_blobs, key=lambda x: x.area, reverse=True)[:3]
+    print(blue_blobs)
 
-    # get the calibration markers
-    calibration_blobs = []
-    for blob in red_blobs:
-        if blob.circularity > 0.9:
-            calibration_blobs.append(blob)
+    # Disp
+    # red_mask.disp(block=True)
+    # green_mask.disp(block=True)
+    # blue_mask.disp(block=True)
+
+    
+    # Step 1: Filter blobs with circularity > 0.9
+    calibration_blobs = [blob for blob in red_blobs if blob.circularity > 0.9]
+
+    # Step 2: Find the largest blob by area
+    largest_blob = max(calibration_blobs, key=lambda x: x.area)
+    calibration_blobs.remove(largest_blob)
+
+    # Step 3: Sort the remaining blobs in clockwise order
+    def angle_from_centroid(blob, centroid):
+        delta_x = blob.centroid[0] - centroid[0]
+        delta_y = blob.centroid[1] - centroid[1]
+        return np.arctan2(delta_y, delta_x)
+
+    centroid = largest_blob.centroid
+    sorted_blobs = sorted(calibration_blobs, key=lambda blob: angle_from_centroid(blob, centroid))
+
+    # Insert the largest blob at the first index
+    sorted_blobs.insert(0, largest_blob)
+    calibration_blobs = sorted_blobs
 
     # get the shapes
-    blobs = [None, None, None, None, None]
+    blobs = [None, None, None, None, None, None, None, None]
     for blob in red_blobs:
-        if blob.circularity < 0.9:
+        if 0.7 < blob.circularity < 0.9:
             blobs[0] = blob # red square
-            print(blobs[0])
+        if blob.circularity < 0.7:
+            blobs[5] = blob # red triangle
+
     for blob in green_blobs:
-        if blob.circularity < 0.9:
+        if 0.7 < blob.circularity < 0.9:
             blobs[1] = blob # green square
+        elif blob.circularity < 0.7:
+            blobs[6] = blob # green triangle
         else:
             blobs[2] = blob # green circle
     for blob in blue_blobs:
-        if blob.circularity < 0.9:
+        if 0.7 < blob.circularity < 0.9:
             blobs[3] = blob # blue square
+        elif blob.circularity < 0.7:
+            blobs[7] = blob # blue triangle
         else:
             blobs[4] = blob # blue circle
     
     shapes = {
         "red square"            : blobs[0],
         "green square"          : blobs[1],
-        "blue square"           : blobs[3],
         "green circle"          : blobs[2],
+        "blue square"           : blobs[3],
         "blue circle"           : blobs[4],
+        "red triangle"           : blobs[5],
+        "green triangle"           : blobs[6],
+        "blue triangle"           : blobs[7],
         "calibration markers"   : calibration_blobs,
     }
     return shapes
