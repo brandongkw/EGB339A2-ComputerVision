@@ -64,9 +64,12 @@ def PickAndPlaceRobot(robotObj,img:mvt.Image,target_positions:Dict):
                     print(f" Bounding Box: {b.bbox}, Center: ({b.u}, {b.v})")
                     sorted_calibration_markers.append(b)
         else:
-            print(f"{shape_name}: Center: ({blob.centroid[0]}, {blob.centroid[1]})")
-            object_positions[shape_name] = np.array([round(blob.centroid[0], 5), round(blob.centroid[1], 5)])
-
+            if blob is not None:
+                print(f"{shape_name}: Center: ({blob.centroid[0]}, {blob.centroid[1]})")
+                object_positions[shape_name] = np.array([round(blob.centroid[0], 5), round(blob.centroid[1], 5)])
+            else: 
+                object_positions[shape_name] = (200, 100)
+                print(shape_name, "not detected, assigned object_positions: ", object_positions) 
     # 3. Print the calibration markers for debugging
     print("\nsorted_calibration_markers:")
     for blob in sorted_calibration_markers:
@@ -401,7 +404,7 @@ def locate_shapes(img: mvt.Image):
     red_lower2 = np.array([170, 120, 50])
     red_upper2 = np.array([180, 255, 255])
 
-    greend_lower = np.array([40, 80, 80])
+    greend_lower = np.array([40, 50, 60])
     greend_upper = np.array([90, 255, 255])
 
     blue_lower = np.array([90, 50, 50])
@@ -431,11 +434,16 @@ def locate_shapes(img: mvt.Image):
     green_mask = mvt.Image(green_mask)
     blue_mask = mvt.Image(blue_mask)
 
+    # Disp
+    # red_mask.disp(block=True)
+    green_mask.disp(block=True)
+    # blue_mask.disp(block=True)
 
     # get the red, green, and blue channels
     red_blobs = red_mask.blobs()
     print(red_blobs)
     green_blobs = green_mask.blobs()
+    green_blobs = [blob for blob in green_blobs if blob.area > 700]
     print(green_blobs)
     blue_blobs = blue_mask.blobs()
     blue_blobs = [blob for blob in blue_blobs if blob.area > 700]
@@ -443,10 +451,6 @@ def locate_shapes(img: mvt.Image):
     # blue_blobs = sorted(blue_blobs, key=lambda x: x.area, reverse=True)[:3]
     print(blue_blobs)
 
-    # Disp
-    # red_mask.disp(block=True)
-    # green_mask.disp(block=True)
-    # blue_mask.disp(block=True)
 
     
     # Step 1: Filter blobs with circularity > 0.9
